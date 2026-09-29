@@ -1,5 +1,4 @@
-﻿using Museum.Domain.Enums;
-using Museum.Tests.Fixtures;
+﻿using Museum.Tests.Fixtures;
 
 namespace Museum.Tests;
 
@@ -23,6 +22,8 @@ public class QueriesTests(MuseumFixture fixture)
                 Exhibition = exhibition,
                 VisitorCount = exhibition.TourExhibitions
                     .SelectMany(te => te.Tour.Tickets)
+                    .Select(ticket => ticket.VisitorId)
+                    .Distinct()
                     .Count()
             })
             .OrderByDescending(x => x.VisitorCount)
@@ -30,9 +31,11 @@ public class QueriesTests(MuseumFixture fixture)
             .ToList();
 
         Assert.Equal(5, result.Count);
+
         Assert.True(
             result.Zip(result.Skip(1))
-                .All(pair => pair.First.VisitorCount >= pair.Second.VisitorCount));
+                .All(pair =>
+                    pair.First.VisitorCount >= pair.Second.VisitorCount));
     }
 
     /// <summary>
@@ -47,20 +50,29 @@ public class QueriesTests(MuseumFixture fixture)
             .Select(tour => new
             {
                 Tour = tour,
-                ParticipantCount = tour.Tickets.Count
+                ParticipantCount = tour.Tickets
+                    .Select(ticket => ticket.VisitorId)
+                    .Distinct()
+                    .Count()
             })
             .ToList();
 
-        var minimumCount = participantCounts.Min(x => x.ParticipantCount);
+        Assert.NotEmpty(participantCounts);
+
+        var minimumCount = participantCounts
+            .Min(x => x.ParticipantCount);
 
         var result = participantCounts
             .Where(x => x.ParticipantCount == minimumCount)
             .ToList();
 
         Assert.NotEmpty(result);
+
         Assert.All(
             result,
-            item => Assert.Equal(minimumCount, item.ParticipantCount));
+            item => Assert.Equal(
+                minimumCount,
+                item.ParticipantCount));
     }
 
     /// <summary>
@@ -80,24 +92,45 @@ public class QueriesTests(MuseumFixture fixture)
                 {
                     Theme = exhibition.Theme,
                     TourDate = te.Tour.Date,
+                    VisitorId = ticket.VisitorId,
                     Price = ticket.Price
                 })))
-            .Where(x => x.TourDate >= periodStart && x.TourDate <= periodEnd)
+            .Where(x =>
+                x.TourDate >= periodStart &&
+                x.TourDate <= periodEnd)
             .GroupBy(x => x.Theme)
             .Select(group => new
             {
                 Theme = group.Key,
-                TotalVisitors = group.Count(),
-                TotalTicketCost = group.Sum(x => x.Price),
+
+                TotalVisitors = group
+                    .Select(x => x.VisitorId)
+                    .Distinct()
+                    .Count(),
+
+                TotalTicketCost = group
+                    .Sum(x => x.Price),
+
                 AverageVisitorsPerDay = group
                     .GroupBy(x => x.TourDate)
-                    .Average(day => day.Count()),
+                    .Average(day =>
+                        day.Select(x => x.VisitorId)
+                            .Distinct()
+                            .Count()),
+
                 MinVisitorsPerDay = group
                     .GroupBy(x => x.TourDate)
-                    .Min(day => day.Count()),
+                    .Min(day =>
+                        day.Select(x => x.VisitorId)
+                            .Distinct()
+                            .Count()),
+
                 MaxVisitorsPerDay = group
                     .GroupBy(x => x.TourDate)
-                    .Max(day => day.Count())
+                    .Max(day =>
+                        day.Select(x => x.VisitorId)
+                            .Distinct()
+                            .Count())
             })
             .ToList();
 
@@ -106,10 +139,12 @@ public class QueriesTests(MuseumFixture fixture)
         Assert.All(result, summary =>
         {
             Assert.True(summary.TotalVisitors > 0);
-            Assert.True(summary.TotalTicketCost >= 0);
+            Assert.True(summary.TotalTicketCost > 0);
             Assert.True(summary.AverageVisitorsPerDay > 0);
             Assert.True(summary.MinVisitorsPerDay > 0);
-            Assert.True(summary.MaxVisitorsPerDay >= summary.MinVisitorsPerDay);
+            Assert.True(
+                summary.MaxVisitorsPerDay >=
+                summary.MinVisitorsPerDay);
         });
     }
 
@@ -139,8 +174,11 @@ public class QueriesTests(MuseumFixture fixture)
 
         Assert.All(result, tour =>
         {
-            Assert.True(tour.Date >= periodStart);
-            Assert.True(tour.Date <= periodEnd);
+            Assert.InRange(
+                tour.Date,
+                periodStart,
+                periodEnd);
+
             Assert.Contains(
                 tour.TourExhibitions,
                 te => te.Exhibition.HallNumber == selectedHall);
@@ -148,7 +186,8 @@ public class QueriesTests(MuseumFixture fixture)
     }
 
     /// <summary>
-    /// Проверяет получение посетителей выбранной экскурсии с сортировкой по ФИО.
+    /// Проверяет получение посетителей выбранной экскурсии
+    /// с сортировкой по ФИО.
     /// </summary>
     [Fact]
     public void VisitorsOfSelectedTourSortedByFullName()
@@ -160,6 +199,7 @@ public class QueriesTests(MuseumFixture fixture)
 
         var result = selectedTour.Tickets
             .Select(ticket => ticket.Visitor)
+            .DistinctBy(visitor => visitor.Id)
             .OrderBy(visitor => visitor.FullName)
             .ToList();
 
