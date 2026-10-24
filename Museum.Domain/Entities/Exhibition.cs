@@ -40,5 +40,5 @@ public class Exhibition
     /// <summary>
     /// Экскурсии, в рамках которых посещается выставка.
     /// </summary>
-    public ICollection<TourExhibition> TourExhibitions { get; set; } = new List<TourExhibition>();
+    public ICollection<TourExhibition> TourExhibitions { get; set; } = [];
 }

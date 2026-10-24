@@ -1,4 +1,5 @@
-﻿namespace Museum.Domain.Entities;
+﻿
+namespace Museum.Domain.Entities;
 
 /// <summary>
 /// Представляет экскурсию в музее.
@@ -11,14 +12,9 @@ public class Tour
     public int Id { get; set; }
 
     /// <summary>
-    /// Дата проведения экскурсии.
+    /// Дата и время начала экскурсии.
     /// </summary>
-    public DateOnly Date { get; set; }
-
-    /// <summary>
-    /// Время начала экскурсии.
-    /// </summary>
-    public TimeOnly StartTime { get; set; }
+    public DateTime StartDateTime { get; set; }
 
     /// <summary>
     /// Продолжительность экскурсии.
@@ -28,10 +24,10 @@ public class Tour
     /// <summary>
     /// Выставки, посещаемые во время экскурсии.
     /// </summary>
-    public ICollection<TourExhibition> TourExhibitions { get; set; } = new List<TourExhibition>();
+    public ICollection<TourExhibition> TourExhibitions { get; set; } = [];
 
     /// <summary>
     /// Билеты на экскурсию.
     /// </summary>
-    public ICollection<Ticket> Tickets { get; set; } = new List<Ticket>();
+    public ICollection<Ticket> Tickets { get; set; } = [];
 }

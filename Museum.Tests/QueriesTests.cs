@@ -1,13 +1,14 @@
-﻿using Museum.Tests.Fixtures;
+﻿using Museum.Domain.Enums;
+using Museum.Tests.Fixtures;
 
 namespace Museum.Tests;
 
 /// <summary>
 /// Проверяет запросы к предметной модели музея.
 /// </summary>
-public class QueriesTests(MuseumFixture fixture)
-    : IClassFixture<MuseumFixture>
+public class QueriesTests(MuseumFixture fixture) : IClassFixture<MuseumFixture>
 {
+
     /// <summary>
     /// Проверяет получение пяти выставок с наибольшим количеством посетителей.
     /// </summary>
@@ -19,7 +20,7 @@ public class QueriesTests(MuseumFixture fixture)
         var result = context.Exhibitions
             .Select(exhibition => new
             {
-                Exhibition = exhibition,
+                exhibition.Id,
                 VisitorCount = exhibition.TourExhibitions
                     .SelectMany(te => te.Tour.Tickets)
                     .Select(ticket => ticket.VisitorId)
@@ -27,16 +28,24 @@ public class QueriesTests(MuseumFixture fixture)
                     .Count()
             })
             .OrderByDescending(x => x.VisitorCount)
+            .ThenBy(x => x.Id)
             .Take(5)
-            .ToList();
+            .Select(x => (x.Id, x.VisitorCount))
+            .ToArray();
 
-        Assert.Equal(5, result.Count);
+        var expected = new[]
+        {
+            (1, 4),
+            (2, 3),
+            (3, 3),
+            (5, 2),
+            (4, 1)
+        };
 
-        Assert.True(
-            result.Zip(result.Skip(1))
-                .All(pair =>
-                    pair.First.VisitorCount >= pair.Second.VisitorCount));
+        Assert.Equal(expected, result);
     }
+
+
 
     /// <summary>
     /// Проверяет поиск экскурсий с минимальным количеством участников.
@@ -49,7 +58,7 @@ public class QueriesTests(MuseumFixture fixture)
         var participantCounts = context.Tours
             .Select(tour => new
             {
-                Tour = tour,
+                tour.Id,
                 ParticipantCount = tour.Tickets
                     .Select(ticket => ticket.VisitorId)
                     .Distinct()
@@ -57,23 +66,24 @@ public class QueriesTests(MuseumFixture fixture)
             })
             .ToList();
 
-        Assert.NotEmpty(participantCounts);
-
         var minimumCount = participantCounts
             .Min(x => x.ParticipantCount);
 
         var result = participantCounts
             .Where(x => x.ParticipantCount == minimumCount)
-            .ToList();
+            .OrderBy(x => x.Id)
+            .Select(x => (x.Id, x.ParticipantCount))
+            .ToArray();
 
-        Assert.NotEmpty(result);
+        var expected = new[]
+        {
+            (9, 0),
+            (10, 0)
+        };
 
-        Assert.All(
-            result,
-            item => Assert.Equal(
-                minimumCount,
-                item.ParticipantCount));
+        Assert.Equal(expected, result);
     }
+
 
     /// <summary>
     /// Проверяет получение статистики посещаемости по темам выставок за выбранный период.
@@ -83,70 +93,65 @@ public class QueriesTests(MuseumFixture fixture)
     {
         var context = fixture.Context;
 
-        var periodStart = new DateOnly(2026, 1, 1);
-        var periodEnd = new DateOnly(2026, 6, 30);
+        var periodStart = new DateOnly(2026, 1, 10);
+        var periodEnd = new DateOnly(2026, 1, 11);
 
         var result = context.Exhibitions
-            .SelectMany(exhibition => exhibition.TourExhibitions
-                .SelectMany(te => te.Tour.Tickets.Select(ticket => new
-                {
-                    Theme = exhibition.Theme,
-                    TourDate = te.Tour.Date,
-                    VisitorId = ticket.VisitorId,
-                    Price = ticket.Price
-                })))
-            .Where(x =>
-                x.TourDate >= periodStart &&
-                x.TourDate <= periodEnd)
-            .GroupBy(x => x.Theme)
-            .Select(group => new
+            .Select(exhibition => exhibition.Theme)
+            .Distinct()
+            .OrderBy(theme => theme)
+            .Select(theme =>
             {
-                Theme = group.Key,
+                var tickets = context.Exhibitions
+                    .Where(exhibition => exhibition.Theme == theme)
+                    .SelectMany(exhibition => exhibition.TourExhibitions)
+                    .Where(relation =>
+                        DateOnly.FromDateTime(relation.Tour.StartDateTime)
+                            >= periodStart &&
+                        DateOnly.FromDateTime(relation.Tour.StartDateTime)
+                            <= periodEnd)
+                    .SelectMany(relation => relation.Tour.Tickets)
+                    .DistinctBy(ticket => ticket.Id)
+                    .ToArray();
 
-                TotalVisitors = group
-                    .Select(x => x.VisitorId)
-                    .Distinct()
-                    .Count(),
+                var visitorsPerDay = Enumerable
+                    .Range(0, periodEnd.DayNumber - periodStart.DayNumber + 1)
+                    .Select(offset => periodStart.AddDays(offset))
+                    .Select(date => tickets
+                        .Where(ticket =>
+                            DateOnly.FromDateTime(ticket.Tour.StartDateTime)
+                                == date)
+                        .Select(ticket => ticket.VisitorId)
+                        .Distinct()
+                        .Count())
+                    .ToArray();
 
-                TotalTicketCost = group
-                    .Sum(x => x.Price),
-
-                AverageVisitorsPerDay = group
-                    .GroupBy(x => x.TourDate)
-                    .Average(day =>
-                        day.Select(x => x.VisitorId)
-                            .Distinct()
-                            .Count()),
-
-                MinVisitorsPerDay = group
-                    .GroupBy(x => x.TourDate)
-                    .Min(day =>
-                        day.Select(x => x.VisitorId)
-                            .Distinct()
-                            .Count()),
-
-                MaxVisitorsPerDay = group
-                    .GroupBy(x => x.TourDate)
-                    .Max(day =>
-                        day.Select(x => x.VisitorId)
-                            .Distinct()
-                            .Count())
+                return (
+                    Theme: theme,
+                    TotalVisitors: tickets
+                        .Select(ticket => ticket.VisitorId)
+                        .Distinct()
+                        .Count(),
+                    TotalTicketCost: tickets.Sum(ticket => ticket.Price),
+                    AverageVisitorsPerDay: visitorsPerDay.Average(),
+                    MinVisitorsPerDay: visitorsPerDay.Min(),
+                    MaxVisitorsPerDay: visitorsPerDay.Max()
+                );
             })
-            .ToList();
+            .ToArray();
 
-        Assert.NotEmpty(result);
-
-        Assert.All(result, summary =>
+        var expected = new[]
         {
-            Assert.True(summary.TotalVisitors > 0);
-            Assert.True(summary.TotalTicketCost > 0);
-            Assert.True(summary.AverageVisitorsPerDay > 0);
-            Assert.True(summary.MinVisitorsPerDay > 0);
-            Assert.True(
-                summary.MaxVisitorsPerDay >=
-                summary.MinVisitorsPerDay);
-        });
+            (ExhibitionTheme.History, 5, 600m, 2.5, 1, 4),
+            (ExhibitionTheme.Art, 3, 300m, 1.5, 0, 3),
+            (ExhibitionTheme.Archaeology, 0, 0m, 0.0, 0, 0),
+            (ExhibitionTheme.Science, 0, 0m, 0.0, 0, 0),
+            (ExhibitionTheme.Ethnography, 0, 0m, 0.0, 0, 0)
+        };
+
+        Assert.Equal(expected, result);
     }
+
 
     /// <summary>
     /// Проверяет получение всех экскурсий в выбранном зале за выбранный период.
@@ -156,34 +161,38 @@ public class QueriesTests(MuseumFixture fixture)
     {
         var context = fixture.Context;
 
-        var selectedHall = context.Exhibitions
-            .Select(exhibition => exhibition.HallNumber)
-            .First();
-
-        var periodStart = new DateOnly(2026, 1, 1);
-        var periodEnd = new DateOnly(2026, 6, 30);
+        const int selectedHall = 1;
+        var periodStart = new DateOnly(2026, 1, 10);
+        var periodEnd = new DateOnly(2026, 1, 12);
 
         var result = context.Tours
             .Where(tour =>
-                tour.Date >= periodStart &&
-                tour.Date <= periodEnd &&
-                tour.TourExhibitions.Any(te =>
-                    te.Exhibition.HallNumber == selectedHall))
-            .Distinct()
-            .ToList();
+                DateOnly.FromDateTime(tour.StartDateTime) >= periodStart &&
+                DateOnly.FromDateTime(tour.StartDateTime) <= periodEnd &&
+                tour.TourExhibitions.Any(relation =>
+                    relation.Exhibition.HallNumber == selectedHall))
+            .OrderBy(tour => tour.StartDateTime)
+            .ThenBy(tour => tour.Id)
+            .Select(tour => (
+                tour.Id,
+                tour.StartDateTime,
+                tour.Duration
+            ))
+            .ToArray();
 
-        Assert.All(result, tour =>
+        var expected = new[]
         {
-            Assert.InRange(
-                tour.Date,
-                periodStart,
-                periodEnd);
+            (1, new DateTime(2026, 1, 10, 10, 0, 0),
+                TimeSpan.FromMinutes(60)),
+            (2, new DateTime(2026, 1, 10, 10, 0, 0),
+                TimeSpan.FromMinutes(60)),
+            (3, new DateTime(2026, 1, 11, 10, 0, 0),
+                TimeSpan.FromMinutes(60))
+        };
 
-            Assert.Contains(
-                tour.TourExhibitions,
-                te => te.Exhibition.HallNumber == selectedHall);
-        });
+        Assert.Equal(expected, result);
     }
+
 
     /// <summary>
     /// Проверяет получение посетителей выбранной экскурсии
@@ -194,23 +203,44 @@ public class QueriesTests(MuseumFixture fixture)
     {
         var context = fixture.Context;
 
-        var selectedTour = context.Tours
-            .First(tour => tour.Tickets.Count > 0);
+        const int selectedTourId = 1;
 
-        var result = selectedTour.Tickets
+        var result = context.Tickets
+            .Where(ticket => ticket.TourId == selectedTourId)
             .Select(ticket => ticket.Visitor)
             .DistinctBy(visitor => visitor.Id)
-            .OrderBy(visitor => visitor.FullName)
-            .ToList();
+            .OrderBy(visitor => visitor.FullName, StringComparer.Ordinal)
+            .Select(visitor => (
+                visitor.Id,
+                visitor.FullName,
+                visitor.Phone,
+                visitor.BirthDate
+            ))
+            .ToArray();
 
-        Assert.NotEmpty(result);
+        var expected = new[]
+        {
+            (
+                1,
+                "Анна Иванова",
+                "+79990000001",
+                new DateOnly(1990, 1, 1)
+            ),
+            (
+                2,
+                "Борис Петров",
+                "+79990000002",
+                new DateOnly(1990, 1, 2)
+            ),
+            (
+                3,
+                "Вера Смирнова",
+                "+79990000003",
+                new DateOnly(1990, 1, 3)
+            )
+        };
 
-        Assert.True(
-            result.Zip(result.Skip(1))
-                .All(pair =>
-                    string.Compare(
-                        pair.First.FullName,
-                        pair.Second.FullName,
-                        StringComparison.Ordinal) <= 0));
+        Assert.Equal(expected, result);
     }
+
 }

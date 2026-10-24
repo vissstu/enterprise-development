@@ -35,10 +35,10 @@ public class Ticket
     /// <summary>
     /// Экскурсия, на которую приобретён билет.
     /// </summary>
-    public Tour Tour { get; set; } = null!;
+    public required Tour Tour { get; set; }
 
     /// <summary>
     /// Посетитель, которому принадлежит билет.
     /// </summary>
-    public Visitor Visitor { get; set; } = null!;
+    public required Visitor Visitor { get; set; }
 }

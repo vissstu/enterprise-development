@@ -8,6 +8,7 @@ public class TourExhibition
     /// <summary>
     /// Идентификатор экскурсии.
     /// </summary>
+    ///
     public int TourId { get; set; }
 
     /// <summary>
@@ -18,10 +19,10 @@ public class TourExhibition
     /// <summary>
     /// Экскурсия.
     /// </summary>
-    public Tour Tour { get; set; } = null!;
+    public required Tour Tour { get; set; }
 
     /// <summary>
     /// Выставка.
     /// </summary>
-    public Exhibition Exhibition { get; set; } = null!;
+    public required Exhibition Exhibition { get; set; }
 }

@@ -28,5 +28,5 @@ public class Visitor
     /// <summary>
     /// Билеты, приобретённые посетителем.
     /// </summary>
-    public ICollection<Ticket> Tickets { get; set; } = new List<Ticket>();
+    public ICollection<Ticket> Tickets { get; set; } = [];
 }

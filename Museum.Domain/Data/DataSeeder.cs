@@ -1,145 +1,184 @@
-﻿using Bogus;
+﻿
 using Museum.Domain.Entities;
 using Museum.Domain.Enums;
 
 namespace Museum.Domain.Data;
 
 /// <summary>
-/// Генерирует тестовые данные для предметной области музея.
+/// Создаёт фиксированные тестовые данные музея.
 /// </summary>
 public static class DataSeeder
 {
     /// <summary>
-    /// Создаёт и заполняет контекст тестовыми данными.
+    /// Заполняет контекст заранее определёнными данными.
     /// </summary>
-    /// <returns>Заполненный контекст музея.</returns>
     public static MuseumContext Seed()
     {
-        Randomizer.Seed = new Random(12345);
-
         var context = new MuseumContext();
 
         CreateExhibitions(context);
         CreateVisitors(context);
         CreateTours(context);
+        CreateTourExhibitions(context);
         CreateTickets(context);
 
         return context;
     }
 
-    /// <summary>
-    /// Создаёт выставки музея.
-    /// </summary>
     private static void CreateExhibitions(MuseumContext context)
     {
-        var themes = Enum.GetValues<ExhibitionTheme>();
+        ExhibitionTheme[] themes =
+        [
+            ExhibitionTheme.History,
+            ExhibitionTheme.Art,
+            ExhibitionTheme.History,
+            ExhibitionTheme.Science,
+            ExhibitionTheme.Science,
+            ExhibitionTheme.Art,
+            ExhibitionTheme.Archaeology,
+            ExhibitionTheme.Ethnography,
+            ExhibitionTheme.Archaeology,
+            ExhibitionTheme.Ethnography
+        ];
 
-        var exhibitionFaker = new Faker<Exhibition>("ru")
-            .RuleFor(x => x.Id, f => f.IndexFaker + 1)
-            .RuleFor(x => x.Name, f => $"Выставка «{f.Commerce.ProductName()}»")
-            .RuleFor(x => x.Theme, f => f.PickRandom(themes))
-            .RuleFor(x => x.HallNumber, f => f.Random.Int(1, 5))
-            .RuleFor(x => x.StartDate, f => DateOnly.FromDateTime(
-                f.Date.Between(
-                    new DateTime(2025, 1, 1),
-                    new DateTime(2026, 6, 1))))
-            .RuleFor(x => x.EndDate, (f, exhibition) =>
-                exhibition.StartDate.AddDays(f.Random.Int(30, 180)));
+        int[] halls = [1, 2, 1, 3, 3, 2, 4, 5, 4, 5];
 
-        context.Exhibitions.AddRange(exhibitionFaker.Generate(10));
+        for (var i = 1; i <= 10; i++)
+        {
+            context.Exhibitions.Add(new Exhibition
+            {
+                Id = i,
+                Name = $"Выставка {i}",
+                Theme = themes[i - 1],
+                HallNumber = halls[i - 1],
+                StartDate = new DateOnly(2026, 1, 1),
+                EndDate = new DateOnly(2026, 1, 31)
+            });
+        }
     }
 
-    /// <summary>
-    /// Создаёт посетителей музея.
-    /// </summary>
     private static void CreateVisitors(MuseumContext context)
     {
-        var visitorFaker = new Faker<Visitor>("ru")
-            .RuleFor(x => x.Id, f => f.IndexFaker + 1)
-            .RuleFor(x => x.FullName, f => f.Person.FullName)
-            .RuleFor(x => x.Phone, f => f.Phone.PhoneNumber())
-            .RuleFor(x => x.BirthDate, f => DateOnly.FromDateTime(
-                f.Date.Between(
-                    new DateTime(1950, 1, 1),
-                    new DateTime(2007, 12, 31))));
+        string[] names =
+        [
+            "Анна Иванова",
+            "Борис Петров",
+            "Вера Смирнова",
+            "Галина Орлова",
+            "Дмитрий Соколов",
+            "Елена Кузнецова",
+            "Жанна Волкова",
+            "Зоя Алексеева",
+            "Иван Морозов",
+            "Кира Федорова"
+        ];
 
-        context.Visitors.AddRange(visitorFaker.Generate(50));
+        for (var i = 1; i <= 10; i++)
+        {
+            context.Visitors.Add(new Visitor
+            {
+                Id = i,
+                FullName = names[i - 1],
+                Phone = $"+799900000{i:00}",
+                BirthDate = new DateOnly(1990, 1, i)
+            });
+        }
     }
 
-    /// <summary>
-    /// Создаёт экскурсии и связывает их с выставками.
-    /// </summary>
     private static void CreateTours(MuseumContext context)
     {
-        var tourFaker = new Faker<Tour>()
-            .RuleFor(x => x.Id, f => f.IndexFaker + 1)
-            .RuleFor(x => x.Date, f => DateOnly.FromDateTime(
-                f.Date.Between(
-                    new DateTime(2026, 1, 1),
-                    new DateTime(2026, 6, 30))))
-            .RuleFor(x => x.StartTime, f => new TimeOnly(
-                f.Random.Int(10, 18),
-                f.Random.Int(0, 3) * 15))
-            .RuleFor(x => x.Duration, f => TimeSpan.FromMinutes(
-                f.Random.Int(45, 120)));
+        int[] tourDays = [10, 10, 11, 12, 12, 13, 14, 15, 16, 17];
 
-        var tours = tourFaker.Generate(30);
-
-        foreach (var tour in tours)
+        for (var i = 1; i <= 10; i++)
         {
-            var exhibitions = context.Exhibitions
-                .Where(x => x.StartDate <= tour.Date && x.EndDate >= tour.Date)
-                .OrderBy(_ => Guid.NewGuid())
-                .Take(Random.Shared.Next(1, 4))
-                .ToList();
-
-            foreach (var exhibition in exhibitions)
+            context.Tours.Add(new Tour
             {
-                var tourExhibition = new TourExhibition
-                {
-                    TourId = tour.Id,
-                    ExhibitionId = exhibition.Id,
-                    Tour = tour,
-                    Exhibition = exhibition
-                };
-
-                tour.TourExhibitions.Add(tourExhibition);
-                exhibition.TourExhibitions.Add(tourExhibition);
-                context.TourExhibitions.Add(tourExhibition);
-            }
+                Id = i,
+                StartDateTime = new DateTime(
+                    2026, 1, tourDays[i - 1], 10, 0, 0),
+                Duration = TimeSpan.FromMinutes(60)
+            });
         }
-
-        context.Tours.AddRange(tours);
     }
 
-    /// <summary>
-    /// Создаёт билеты на экскурсии.
-    /// </summary>
+    private static void CreateTourExhibitions(MuseumContext context)
+    {
+        (int tourId, int exhibitionId)[] connections =
+        [
+            (1, 1),
+            (1, 2),
+            (2, 1),
+            (2, 3),
+            (3, 3),
+            (4, 4),
+            (5, 5),
+            (6, 6),
+            (7, 7),
+            (8, 8),
+            (9, 9),
+            (10, 10)
+        ];
+
+        foreach (var (tourId, exhibitionId) in connections)
+        {
+            var tour = context.Tours.Single(x => x.Id == tourId);
+            var exhibition = context.Exhibitions.Single(
+                x => x.Id == exhibitionId);
+
+            var relation = new TourExhibition
+            {
+                TourId = tourId,
+                ExhibitionId = exhibitionId,
+                Tour = tour,
+                Exhibition = exhibition
+            };
+
+            context.TourExhibitions.Add(relation);
+            tour.TourExhibitions.Add(relation);
+            exhibition.TourExhibitions.Add(relation);
+        }
+    }
+
     private static void CreateTickets(MuseumContext context)
     {
-        var ticketFaker = new Faker<Ticket>()
-            .RuleFor(x => x.Id, f => f.IndexFaker + 1)
-            .RuleFor(x => x.TourId, f => f.PickRandom(context.Tours).Id)
-            .RuleFor(x => x.VisitorId, f => f.PickRandom(context.Visitors).Id)
-            .RuleFor(x => x.Type, f => f.Random.Bool()
-                ? TicketType.Adult
-                : TicketType.Concessionary)
-            .RuleFor(x => x.Price, (f, ticket) =>
-                ticket.Type == TicketType.Adult
-                    ? f.Random.Decimal(500, 1000)
-                    : f.Random.Decimal(200, 500));
+        (int tourId, int visitorId)[] purchases =
+        [
+            (1, 3),
+            (1, 2),
+            (1, 1),
+            (2, 2),
+            (2, 4),
+            (3, 5),
+            (4, 6),
+            (5, 7),
+            (5, 8),
+            (6, 9),
+            (7, 10),
+            (8, 1)
+        ];
 
-        var tickets = ticketFaker.Generate(150);
-
-        foreach (var ticket in tickets)
+        for (var i = 0; i < purchases.Length; i++)
         {
-            ticket.Tour = context.Tours.First(x => x.Id == ticket.TourId);
-            ticket.Visitor = context.Visitors.First(x => x.Id == ticket.VisitorId);
+            var (tourId, visitorId) = purchases[i];
 
-            ticket.Tour.Tickets.Add(ticket);
-            ticket.Visitor.Tickets.Add(ticket);
+            var tour = context.Tours.Single(x => x.Id == tourId);
+            var visitor = context.Visitors.Single(
+                x => x.Id == visitorId);
+
+            var ticket = new Ticket
+            {
+                Id = i + 1,
+                TourId = tourId,
+                VisitorId = visitorId,
+                Type = TicketType.Adult,
+                Price = 100m,
+                Tour = tour,
+                Visitor = visitor
+            };
+
+            context.Tickets.Add(ticket);
+            tour.Tickets.Add(ticket);
+            visitor.Tickets.Add(ticket);
         }
-
-        context.Tickets.AddRange(tickets);
     }
 }
